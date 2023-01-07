@@ -154,11 +154,15 @@ class MPDPlayer(basic_player.BasicPlayer):
         real_source = pathlib.Path(self.config['file'])
         #TODO: handle erroneous additions
         self.client.clear()
-        self.client.add(str(real_source.relative_to(self.root)))
+        if real_source == self.root:
+            pass
+            self.client.add("")
+        else:
+            self.client.add(str(real_source.relative_to(self.root)))
         
     @QtCore.Slot()
     def initialize_player(self) -> None:
-        self.client.play(0)
+        self.client.playid(random.choice(self.client.playlistinfo())['id'])
         self.media_changed.emit()
         self.media_played.emit()
         self.current_id = int(self.client.currentsong()['id'])

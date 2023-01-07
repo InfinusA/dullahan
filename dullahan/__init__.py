@@ -5,15 +5,16 @@ import pathlib
 import random
 import sqlite3
 import sys
+import threading
 import time
 import typing
+import logging
 
 import mpris_server
 import mpris_server.events
 from . import basic_player
 from . import song_select
 from . import mpd
-import vlc
 from PySide2 import QtCore, QtGui, QtWidgets
 
 #TODO: add config file support for stuff
@@ -322,8 +323,17 @@ class Mpris(QtCore.QObject):
         self.player.media_meta_ready.connect(lambda: updater.on_player_all())
         
         self.mpris.publish()
-    
+
+
+def _except_hook(exc_type, exc_value, exc_traceback):
+    logging.critical(exc_value, exc_info=True)
+    sys.exit(1)
+
 def exec():
+    pathlib.Path("~/.config/dullahan/").expanduser().mkdir(parents=True, exist_ok=True)
+    logging.basicConfig(filename=str(pathlib.Path("~/.config/dullahan/error.log").expanduser()), filemode='a+')
+    sys.excepthook = _except_hook
+    threading.excepthook = _except_hook
     parser = argparse.ArgumentParser("Dullahan")
     parser.add_argument("--shuffle", "-s", action="store_true", default=False)
     parser.add_argument("--loop", "-l", action="store_true", default=False)
@@ -364,6 +374,7 @@ def exec():
     player.finished.connect(exit_)
     #start app
     app.exec_()
-        
+
+
 if __name__ == "__main__":
     exec()
