@@ -7,6 +7,8 @@ import typing
 import mutagen
 import mutagen._file
 import mutagen.mp4
+import mutagen.mp3
+import mutagen.id3
 from PySide2 import QtCore, QtGui
 
 Capabilities = collections.namedtuple('Capabilities', ['loop', 'shuffle', 'crossfade'])
@@ -37,6 +39,13 @@ class FileMetadata(object):
             self.artist = ", ".join(self.base.tags['\xa9ART']) or self.file.parent
             self.raw_art: bytes = self.base.tags['covr'][0] if 'covr' in self.base.tags else b''
             self.art = self._data_to_qimage(self.base.tags['covr'][0]) if 'covr' in self.base.tags else self.placeholder_art
+        elif isinstance(self.base, mutagen.mp3.MP3):
+            tags: mutagen.id3.ID3 = self.base.tags
+            self.title = tags['TIT2'].text[0]
+            self.album = tags['TALB'].text[0]
+            self.artist = ", ".join(tags['TPE1'].text)
+            self.raw_art: bytes = tags['APIC:'].data
+            self.art = self._data_to_qimage(self.raw_art)
         else:
             raise RuntimeError(f"unknown file type {type(self.base).__name__}")
 
