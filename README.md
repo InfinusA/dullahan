@@ -1,1 +1,3 @@
 # Dullahan
+
+building: `make full`
