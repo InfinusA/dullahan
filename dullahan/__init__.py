@@ -326,12 +326,13 @@ class Mpris(QtCore.QObject):
 
 
 def _except_hook(exc_type, exc_value, exc_traceback):
-    logging.critical(exc_value, exc_info=True)
+    logging.critical(f"{exc_type} {exc_value} {exc_traceback}", exc_info=True)
     sys.exit(1)
 
 def exec():
     pathlib.Path("~/.config/dullahan/").expanduser().mkdir(parents=True, exist_ok=True)
     logging.basicConfig(filename=str(pathlib.Path("~/.config/dullahan/error.log").expanduser()), filemode='a+')
+    logging.getLogger().addHandler(logging.StreamHandler(sys.stdout))
     sys.excepthook = _except_hook
     threading.excepthook = _except_hook
     parser = argparse.ArgumentParser("Dullahan")
