@@ -11,3 +11,5 @@ Requires-Python: >=3.6
 Description-Content-Type: text/markdown
 
 # Dullahan
+
+building: `make full`

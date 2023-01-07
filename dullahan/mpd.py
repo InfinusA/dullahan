@@ -138,6 +138,7 @@ class MPDPlayer(basic_player.BasicPlayer):
         self.client.random(int(self.config['shuffle']))
         self.client.repeat(int(self.config['loop']))
         self.client.crossfade(int(self.config['crossfade_length']))
+        self.client.update()
         self.running = False
         self.root = pathlib.Path(next(filter(lambda d: d['mount'] == '', self.client.listmounts()))['storage'])
         self.backup_queue: typing.MutableSequence[pathlib.Path] = []

@@ -12,4 +12,5 @@ dullahan.egg-info/PKG-INFO
 dullahan.egg-info/SOURCES.txt
 dullahan.egg-info/dependency_links.txt
 dullahan.egg-info/entry_points.txt
+dullahan.egg-info/requires.txt
 dullahan.egg-info/top_level.txt
