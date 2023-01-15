@@ -1,4 +1,5 @@
 from abc import abstractmethod
+import argparse
 import collections
 import os
 import pathlib
@@ -68,7 +69,7 @@ class BasicPlayer(QtCore.QObject):
     finished = QtCore.Signal()
     progress = QtCore.Signal(float)
     
-    def __init__(self, config: dict) -> None:
+    def __init__(self, config: argparse.Namespace) -> None:
         super().__init__(None)
         self.config = config
     # setup

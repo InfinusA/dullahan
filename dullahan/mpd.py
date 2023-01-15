@@ -1,3 +1,4 @@
+import argparse
 import os
 import pathlib
 import queue
@@ -128,7 +129,7 @@ class ThreadedMPD(QtCore.QObject):
             return super().__getattribute__(self, __name)
 
 class MPDPlayer(basic_player.BasicPlayer):
-    def __init__(self, config: dict) -> None:
+    def __init__(self, config: argparse.Namespace) -> None:
         super().__init__(config)
         self.capabilities = basic_player.Capabilities(loop=True, shuffle=True, crossfade=True)
         self.client = ThreadedMPD('/run/user/1000/mpd/socket')
@@ -140,7 +141,7 @@ class MPDPlayer(basic_player.BasicPlayer):
         self.client.crossfade(int(self.config['crossfade_length']))
         self.client.update()
         self.running = False
-        self.root = pathlib.Path(next(filter(lambda d: d['mount'] == '', self.client.listmounts()))['storage'])
+        self.root = pathlib.Path(next(filter(lambda d: d['mount'] == '', self.client.listmounts()))['storage']) #TODO: multiple music directories
         self.backup_queue: typing.MutableSequence[pathlib.Path] = []
         
         self.thread_finished = False
@@ -155,11 +156,22 @@ class MPDPlayer(basic_player.BasicPlayer):
         real_source = pathlib.Path(self.config['file'])
         #TODO: handle erroneous additions
         self.client.clear()
-        if real_source == self.root:
-            pass
-            self.client.add("")
+        source = pathlib.Path(self.config.file).expanduser().resolve()
+        if not source.relative_to(self.root):
+            raise RuntimeError(f"Source file/folder {source} is not in mpd's music directory")
+        if source.is_file():
+            self.client.add(str(source))
+        elif source.is_dir():
+            if source == self.root:
+                self.client.add("")
+            else:
+                self.client.add(str(source.relative_to(self.root)))
         else:
-            self.client.add(str(real_source.relative_to(self.root)))
+            raise RuntimeError(f"Source must be a file or folder to play")
+
+        self.backup_queue = #TODO: THIS!!!
+
+        self.queue_loaded.emit()
         
         self.client.playid(random.choice(self.client.playlistinfo())['id'])
         self.media_changed.emit()
