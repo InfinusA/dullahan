@@ -149,7 +149,7 @@ class MPDPlayer(basic_player.BasicPlayer):
         
     # setup
     @QtCore.Slot()
-    def load_queue(self, queue: typing.MutableSequence[pathlib.Path]) -> None:
+    def start(self) -> None:
         self.backup_queue = queue
         self.queue_loaded.emit()
         real_source = pathlib.Path(self.config['file'])
@@ -161,8 +161,6 @@ class MPDPlayer(basic_player.BasicPlayer):
         else:
             self.client.add(str(real_source.relative_to(self.root)))
         
-    @QtCore.Slot()
-    def initialize_player(self) -> None:
         self.client.playid(random.choice(self.client.playlistinfo())['id'])
         self.media_changed.emit()
         self.media_played.emit()

@@ -23,7 +23,7 @@ class FileMetadata(object):
         self.album = ''
         self.artist = ''
         self.art = ''
-        self.raw_art = ''
+        self.raw_art = b''
         self.placeholder_art = QtGui.QImage(256, 256, QtGui.QImage.Format_Indexed8)
         self.placeholder_art.fill(QtGui.qRgb(50,50,50))
         if autoparse:
@@ -73,9 +73,7 @@ class BasicPlayer(QtCore.QObject):
         self.config = config
     # setup
     @QtCore.Slot()
-    def load_queue(self, queue: typing.MutableSequence[pathlib.Path]) -> None: pass
-    @QtCore.Slot()
-    def initialize_player(self) -> None: pass
+    def start(self) -> None: pass
     @QtCore.Slot()
     def event_loop(self) -> None: pass
     # info

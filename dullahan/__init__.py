@@ -360,8 +360,7 @@ def exec():
     player_thread.started.connect(player.event_loop)
     #mpris_thread.started.connect(mpris.run)
     #preprep
-    player.load_queue(meta.generate_queue())
-    player.initialize_player()
+    player.start()
     mpris.initialize()
     #start threads
     player_thread.start()
