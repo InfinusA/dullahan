@@ -118,16 +118,18 @@ class Meta(QtCore.QObject):
         self.cursor.execute("INSERT INTO file_hashes(hash, base) VALUES (?, ?)", (filename_hash, media_id))
         self.db.commit()
     
-    def generate_queue(self):
-        playlist_data = pathlib.Path(self.config.file).resolve()
+    @staticmethod
+    def generate_queue(path):
+        playlist_data = pathlib.Path(path).resolve()
         if playlist_data.is_file():
             playlist_raw = playlist_data.read_text()
-            playlist = [pathlib.Path(self._parse_playlist_string(playlist_data, line)) for line in playlist_raw.split("\n") if line]
+            playlist = [pathlib.Path(Meta._parse_playlist_string(playlist_data, line)) for line in playlist_raw.split("\n") if line]
         else:
             playlist = [f.resolve() for f in playlist_data.rglob("*") if f.is_file()]
         return playlist
 
-    def _parse_playlist_string(self, playlist_file: pathlib.Path, item: str) -> str:
+    @staticmethod
+    def _parse_playlist_string(playlist_file: pathlib.Path, item: str) -> str:
         if not item[0] == "/" or item.startswith("file:/"):
             return str(pathlib.Path(playlist_file.parent, item))
         return item
@@ -349,7 +351,7 @@ def exec():
     player_thread = QtCore.QThread()
     #mpris_thread = QtCore.QThread()
     #create class instances
-    player = mpd.MPDPlayer(vars(conf))
+    player = mpd.MPDPlayer(conf)
     mpris = Mpris(player)
     meta = Meta(conf, player)
     tray = Tray(conf, player)
@@ -360,7 +362,7 @@ def exec():
     player_thread.started.connect(player.event_loop)
     #mpris_thread.started.connect(mpris.run)
     #preprep
-    player.load_queue(meta.generate_queue())
+    player.load_queue()
     player.initialize_player()
     mpris.initialize()
     #start threads
