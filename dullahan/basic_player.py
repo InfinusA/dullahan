@@ -14,6 +14,17 @@ from PySide2 import QtCore, QtGui
 
 Capabilities = collections.namedtuple('Capabilities', ['loop', 'shuffle', 'crossfade'])
 
+MP4CONV = {
+    12: 'gif',
+    13: 'jpg',
+    14: 'png'
+}
+MP3CONV = {
+    'image/png': 'png',
+    'image/jpeg': 'jpg',
+    'image/gif': 'gif'
+}
+
 class FileMetadata(object):
     def __init__(self, file: str | os.PathLike, autoparse=True) -> None:
         self.file = pathlib.Path(file)
@@ -25,21 +36,25 @@ class FileMetadata(object):
         self.artist = ''
         self.art = ''
         self.raw_art = b''
+        self.art_filetype = ''
         self.placeholder_art = QtGui.QImage(256, 256, QtGui.QImage.Format_Indexed8)
         self.placeholder_art.fill(QtGui.qRgb(50,50,50))
         if autoparse:
             self.parse()
     
-    def _data_to_qimage(self, data: str) -> QtGui.QImage:
+    def _data_to_qimage(self, data: str | bytes) -> QtGui.QImage:
         return QtGui.QImage.fromData(QtCore.QByteArray.fromRawData(data))
     
     def parse(self):
         if isinstance(self.base, mutagen.mp4.MP4):
-            self.title = self.base.tags['\xa9nam'][0] or self.file.name
-            self.album = self.base.tags['\xa9alb'][0] or self.file.parent
-            self.artist = ", ".join(self.base.tags['\xa9ART']) or self.file.parent
-            self.raw_art: bytes = self.base.tags['covr'][0] if 'covr' in self.base.tags else b''
-            self.art = self._data_to_qimage(self.base.tags['covr'][0]) if 'covr' in self.base.tags else self.placeholder_art
+            tags: mutagen.mp4.MP4Tags = self.base.tags 
+            self.title = tags['\xa9nam'][0] or self.file.name
+            self.album = tags['\xa9alb'][0] or self.file.parent
+            self.artist = ", ".join(tags['\xa9ART']) or self.file.parent
+            self.raw_art: bytes = tags['covr'][0] if 'covr' in tags else b''
+            self.art = self._data_to_qimage(tags['covr'][0]) if 'covr' in tags else self.placeholder_art
+            self.art_filetype = MP4CONV[tags['covr'][0].imageformat]
+            
         elif isinstance(self.base, mutagen.mp3.MP3):
             tags: mutagen.id3.ID3 = self.base.tags
             self.title = tags['TIT2'].text[0]
@@ -47,6 +62,8 @@ class FileMetadata(object):
             self.artist = ", ".join(tags['TPE1'].text)
             self.raw_art: bytes = tags['APIC:'].data
             self.art = self._data_to_qimage(self.raw_art)
+            self.art_filetype = MP3CONV[tags['APIC:'].mime]
+            
         else:
             raise RuntimeError(f"unknown file type {type(self.base).__name__}")
 

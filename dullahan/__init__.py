@@ -280,7 +280,7 @@ class Mpris(QtCore.QObject):
         def get_maximum_rate(self) -> mpris_server.base.RateDecimal:return super().get_maximum_rate()
         def get_shuffle(self) -> bool: return self.d_player.get_shuffle()
         def set_shuffle(self, val: bool): return self.d_player.set_shuffle(val)
-        def get_art_url(self, track: int) -> str: return self.d_player.get_current_art() #TODO: IMPORTANT
+        def get_art_url(self, track: int) -> str: return "file://"+self.d_player.get_current_art()
         def get_volume(self) -> mpris_server.base.VolumeDecimal: return super().get_volume()
         def set_volume(self, val: mpris_server.base.VolumeDecimal): pass
         def is_mute(self) -> bool: return False
@@ -334,9 +334,9 @@ def _except_hook(exc_type, exc_value, exc_traceback):
 def exec():
     pathlib.Path("~/.config/dullahan/").expanduser().mkdir(parents=True, exist_ok=True)
     logging.basicConfig(filename=str(pathlib.Path("~/.config/dullahan/error.log").expanduser()), filemode='a+')
-    logging.getLogger().addHandler(logging.StreamHandler(sys.stdout))
-    sys.excepthook = _except_hook
-    threading.excepthook = _except_hook
+    logging.getLogger().addHandler(logging.StreamHandler(sys.stderr))
+    #sys.excepthook = _except_hook
+    #threading.excepthook = _except_hook
     parser = argparse.ArgumentParser("Dullahan")
     parser.add_argument("--shuffle", "-s", action="store_true", default=False)
     parser.add_argument("--loop", "-l", action="store_true", default=False)

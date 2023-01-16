@@ -121,7 +121,8 @@ class SongSelect(QtCore.QObject):
         self.loader_thread.quit()
         
     def on_meta_progress(self, v):
-        self.loading.setText(f"Loading... {v}/{len(self.file_list)}")
+        if self.main.isVisible:
+            self.loading.setText(f"Loading... {v}/{len(self.file_list)}")
     
     def when_loaded(self):
         self.meta_list = self.loader.meta_list
