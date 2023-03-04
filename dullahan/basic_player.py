@@ -96,9 +96,11 @@ class BasicPlayer(QtCore.QObject):
     def event_loop(self) -> None: pass
     # info
     @abstractmethod
+    def get_all_metadata(self) -> list[FileMetadata]: pass
+    @abstractmethod
     def get_capabilities(self) -> Capabilities: pass
     @abstractmethod
-    def get_current_metadata(self) -> dict: pass
+    def get_current_metadata(self) -> FileMetadata: pass
     @abstractmethod
     def get_file_metadata(self, path: str | os.PathLike) -> FileMetadata: pass
     @abstractmethod

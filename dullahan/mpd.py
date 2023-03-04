@@ -10,30 +10,45 @@ import mpd
 #import musicpd as mpd
 from PySide2 import QtCore, QtGui
 
+class PointlessError(Exception):
+    pass
+
 #pretty useless rn
-"""class MPDMetadata(basic_player.FileMetadata):
-    def __init__(self, file: str | os.PathLike, root: str | os.PathLike, client: mpd.MPDClient, autoparse=True) -> None:
-        self.file = pathlib.Path(file) #can be relative to mpd song directiory
-        self.root = pathlib.Path(root)
+class MPDMetadata(basic_player.FileMetadata):
+    def __init__(self, meta: dict | str | os.PathLike, *, client=None, fast=False) -> None:
         self.client = client
-        self.title = ''
-        self.album = ''
-        self.artist = ''
-        self.art = ''
-        self.placeholder_art = QtGui.QImage(256, 256, QtGui.QImage.Format_Indexed8)
-        self.placeholder_art.fill(QtGui.qRgb(50,50,50))
-        if autoparse:
-            self.parse()
-    
-    def parse(self):
-        meta: dict = self.client.find('file', str(self.file.relative_to(self.root)))[0]
+        print(meta)
+        if isinstance(meta, (str, os.PathLike)):
+            meta = self.client.find('file', meta)[0]
         self.title = meta['title']
         self.album = meta['album']
         self.artist = meta['artist']
+        self.placeholder_art = QtGui.QImage(256, 256, QtGui.QImage.Format_Indexed8)
+        self.placeholder_art.fill(QtGui.qRgb(50,50,50))
+        self.art = self.placeholder_art
+        self.art_filetype = ''
+        self.raw_art = b''
+        self.fast = fast
+        self.meta = meta
+
+    def findtype(self, first20: bytes):
+        if first20[1:4] == b'PNG':
+            return 'png'
+        elif first20[6:10] == b'JFIF':
+            return 'jpg'
+        else:
+            raise RuntimeError("unsupported image format")
+
+    
+    def parse(self):
+        if self.fast:
+            return
         try:
-            self.art = self._data_to_qimage(self.client.readpicture(str(self.file))['binary'])
+            self.raw_art = self.client.readpicture(self.meta['file'])['binary']
+            self.art = self._data_to_qimage(self.raw_art)
         except:
-            self.art = self.placeholder_art"""
+            self.art = self.placeholder_art
+        self.art_filetype = self.findtype(self.raw_art[:20])
 
 class ThreadedMPD(QtCore.QObject):
     '''
@@ -51,6 +66,9 @@ class ThreadedMPD(QtCore.QObject):
         self.__thread.started.connect(self.threadloop)
         self.__thread.start()
         self.finished = False
+    
+    def __connect(self):
+        return self.__player.connect(self.__socket, self.__port)
     
     def threadloop(self):
         while True:
@@ -100,7 +118,7 @@ class ThreadedMPD(QtCore.QObject):
             }
             self.__queue.put(d)
             while ret not in self.__resps:
-                pass
+                time.sleep(0.5)
             v = self.__resps[ret]
             if isinstance(v, Exception):
                 raise v
@@ -121,7 +139,9 @@ class ThreadedMPD(QtCore.QObject):
     
     def __getattr__(self, __name: str) -> typing.Any:
         #print("fetch", __name)
-        if callable(getattr(self.__player, __name)):
+        if __name in ['connect']:
+            return self.__connect
+        elif callable(getattr(self.__player, __name)):
             return self.player_override(getattr(self.__player, __name))
         elif getattr(self.__player, __name):
             return getattr(self.__player, __name)
@@ -134,15 +154,10 @@ class MPDPlayer(basic_player.BasicPlayer):
         self.capabilities = basic_player.Capabilities(loop=True, shuffle=True, crossfade=True)
         self.client = ThreadedMPD('/run/user/1000/mpd/socket')
         self.client.timeout = 5
-        self.client.connect('/run/user/1000/mpd/socket')
-        self.client.consume(0)
-        self.client.random(int(self.config.shuffle))
-        self.client.repeat(int(self.config.loop))
-        self.client.crossfade(int(self.config.crossfade_length))
+        self.client.connect()
         self.client.update()
         self.running = False
         self.root = pathlib.Path(next(filter(lambda d: d['mount'] == '', self.client.listmounts()))['storage']).expanduser().resolve() #TODO: multiple music directories
-        self.backup_queue: typing.MutableSequence[pathlib.Path] = []
         
         self.thread_finished = False
         self.thread_exited = False
@@ -151,10 +166,14 @@ class MPDPlayer(basic_player.BasicPlayer):
     # setup
     @QtCore.Slot()
     def start(self) -> None:
-        self.queue_loaded.emit()
         real_source = pathlib.Path(self.config.file)
         #TODO: handle erroneous additions
         self.client.clear()
+        self.client.consume(0)
+        self.client.random(int(self.config.shuffle))
+        self.client.repeat(int(self.config.loop))
+        self.client.crossfade(int(self.config.crossfade_length))
+
         source = pathlib.Path(self.config.file).expanduser().resolve()
         if not source.relative_to(self.root):
             raise RuntimeError(f"Source file/folder {source} is not in mpd's music directory")
@@ -167,8 +186,6 @@ class MPDPlayer(basic_player.BasicPlayer):
                 self.client.add(str(source.relative_to(self.root)))
         else:
             raise RuntimeError(f"Source must be a file or folder to play")
-
-        self.backup_queue = [pathlib.Path(self.root, data['file']).expanduser().resolve() for data in self.client.playlistinfo()]
 
         self.queue_loaded.emit()
         
@@ -227,15 +244,19 @@ class MPDPlayer(basic_player.BasicPlayer):
         #return MPDMetadata(self.client.currentsong()['file'], self.root, self.client)
     def get_file_metadata(self, path: str | os.PathLike) -> basic_player.FileMetadata:
         path = pathlib.Path(path)
-        if not path.is_absolute():
-            path = pathlib.Path(self.root, path)
-        return basic_player.FileMetadata(path)
+        if path.is_absolute():
+            path = path.relative_to(self.root)
+        return MPDMetadata(path, client=self.client)
     
     def get_queue(self) -> list[pathlib.Path]:
         try:
             return [pathlib.Path(self.root, f['file']) for f in self.client.playlistinfo()]
         except mpd.ConnectionError:
-            return list(self.backup_queue)
+            return []
+    
+    def get_all_metadata(self) -> list[MPDMetadata]:
+        return [MPDMetadata(e, fast=True) for e in self.client.playlistinfo()]
+
     @QtCore.Slot(None, result=bool)
     def get_shuffle(self) -> bool: return self.client.status()['random'] == '1'
     @QtCore.Slot(None, result=float)

@@ -35,13 +35,13 @@ class MetaParser(QtCore.QObject):
         return QtGui.QImage.fromData(QtCore.QByteArray.fromRawData(data))
     
     def run(self):
-        self.meta_list = []
-        for index, media in enumerate(self.file_list):
-            if self.dead:
-                break
-            self.progress.emit(index+1)
-            metadata = self.player.get_file_metadata(media)
-            self.meta_list.append(vars(metadata))
+        self.meta_list = [vars(m) for m in self.player.get_all_metadata()]
+        # for index, media in enumerate():
+        #     if self.dead:
+        #         break
+        #     self.progress.emit(index+1)
+        #     metadata = self.player.get_file_metadata(media)
+        #     self.meta_list.append(vars(metadata))
         if not self.dead:
             self.finished.emit()
     
@@ -133,10 +133,11 @@ class SongSelect(QtCore.QObject):
         self.icns = []
         for mindex, meta in enumerate(self.meta_list):
             #self.songtable.setRowHeight(mindex, 32)
-            i = QtGui.QPixmap(meta['art'])
-            self.icns.append(i)
+            #i = QtGui.QPixmap(meta['art'])
+            #self.icns.append(i)
             #self.songtable.setCellWidget(mindex, 0, l)
-            self.tablemodel.setItem(mindex, 0, QtGui.QStandardItem(i, meta['title']))
+            #self.tablemodel.setItem(mindex, 0, QtGui.QStandardItem(i, meta['title']))
+            self.tablemodel.setItem(mindex, 0, QtGui.QStandardItem(meta['title']))
             self.tablemodel.setItem(mindex, 1, QtGui.QStandardItem(meta['artist']))
             self.tablemodel.setItem(mindex, 2, QtGui.QStandardItem(meta['album']))
         
