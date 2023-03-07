@@ -144,7 +144,7 @@ class SongSelect(QtCore.QObject):
     def set_file_list(self, file_list):
         self.file_list = file_list
         self.loader.set_file_list(file_list)
-        self.loading.setText(f"Loading... 0/{len(file_list)}")
+        self.loading.setText(f"Loading... 0/{len(list(file_list))}")
         self.update_metadata()
     
     def update_metadata(self):

@@ -14,7 +14,7 @@ import mpris_server
 import mpris_server.events
 from . import basic_player
 from . import song_select
-from . import mpd
+from . import mpder as mpd
 from PySide2 import QtCore, QtGui, QtWidgets
 
 #TODO: add config file support for stuff
@@ -220,8 +220,8 @@ class Tray(QtCore.QObject):
             pass
     
     def on_pauseplay(self, is_paused):
-        self.act_toggle.setIcon(self._get_icon(f"SP_Media{'Play' if not is_paused else 'Pause'}"))
-        self.act_toggle.setText('Play' if not is_paused else 'Pause')
+        self.act_toggle.setIcon(self._get_icon(f"SP_Media{'Play' if is_paused else 'Pause'}"))
+        self.act_toggle.setText('Play' if is_paused else 'Pause')
 
 
 class Mpris(QtCore.QObject):
@@ -341,6 +341,8 @@ def exec():
     parser.add_argument("--shuffle", "-s", action="store_true", default=False)
     parser.add_argument("--loop", "-l", action="store_true", default=False)
     parser.add_argument("--crossfade-length", "-c", default=0)
+    parser.add_argument("-o", "--host", default=None)
+    parser.add_argument("-p", "--port", default=None)
     parser.add_argument("file")
     
     conf = parser.parse_args()
