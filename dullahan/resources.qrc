@@ -1,0 +1,7 @@
+<!DOCTYPE RCC>
+<RCC version="1.0">
+    <qresource prefix="icons">
+        <file alias="dullahan.png">dullahan.png</file>
+        <file alias="dullahan.svg">dullahan.svg</file>
+    </qresource>
+</RCC>

@@ -7,7 +7,7 @@ install:
 	pip install build/dullahan-0.0.*.tar.gz
 #todo: dynamic version number
 clean:
-	rm -r build
+	rm -rf build
 remove:
 	pip uninstall dullahan
 

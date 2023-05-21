@@ -9,10 +9,12 @@ import threading
 import time
 import typing
 import logging
+from urllib.parse import quote
 
 import mpris_server
 import mpris_server.events
 from . import basic_player
+from . import resources
 from . import song_select
 from . import mpder as mpd
 from PySide2 import QtCore, QtGui, QtWidgets
@@ -143,14 +145,15 @@ class Tray(QtCore.QObject):
         self.tray.setToolTip("Dullahan")
         
         #self.pm = QtGui.QPixmap.fromImage("dullahan.png", )
-        self.icon = QtGui.QIcon.fromTheme("dullahan", self._get_icon("emblem-music-symbolic"))
+        self.icon = QtGui.QIcon(":/icons/dullahan.png")#QtGui.QIcon.fromTheme("dullahan", self._get_icon("emblem-music-symbolic"))
         self.tray.setIcon(self.icon) #self._get_icon("emblem-music-symbolic")
         self.tray.activated.connect(self.handle_clicks)
         
-        self.popup = song_select.SongSelect(self.player.get_queue(), self.player)
+        self.popup = song_select.SongSelect(self.player)
         self.popup.song_selected.connect(self.select_song)
+        self.popup.song_queued.connect(self.queue_song)
         
-        self.player.queue_loaded.connect(lambda: self.popup.set_file_list(self.player.get_queue()))
+        self.player.queue_loaded.connect(lambda: self.popup.update_metadata())
         self.player.media_changed.connect(lambda: self.tray.setToolTip(f"{self.player.get_current_title()} \nby {self.player.get_current_artist()} (Dullahan)"))
         self.player.media_paused.connect(lambda: self.on_pauseplay(True))
         self.player.media_stopped.connect(lambda: self.on_pauseplay(True))
@@ -180,6 +183,8 @@ class Tray(QtCore.QObject):
         act_search.triggered.connect(self.popup.show)
         act_exit = QtWidgets.QAction(self._get_icon("application-exit"), "Quit", self.menu)
         act_exit.triggered.connect(lambda: self.quit_button())
+        #act_exitafter = QtWidgets.QAction("Quit after current", self.menu)
+        #act_exitafter.triggered.connect(lambda: self.quitafter_button())
     
         
         self.menu.addAction(self.act_toggle)
@@ -192,6 +197,7 @@ class Tray(QtCore.QObject):
         self.menu.addAction(act_search)
         self.menu.addSeparator()
         self.menu.addAction(act_exit)
+        #self.menu.addAction(act_exitafter)
         
         self.tray.setContextMenu(self.menu)
         self.tray.show()
@@ -200,9 +206,16 @@ class Tray(QtCore.QObject):
         self.popup.quit()
         self.player.quit()
     
+    def quitafter_button(self):
+        self.player.quit_after_current()
+    
     @QtCore.Slot()
     def select_song(self, filename: str):
         self.player.set_current_by_file(filename)
+        
+    @QtCore.Slot()
+    def queue_song(self, filename: str):
+        self.player.queue_by_file(filename)
     
     def _get_icon(self, name: str):
         if hasattr(QtWidgets.QStyle, name):
@@ -239,18 +252,19 @@ class Mpris(QtCore.QObject):
         def quit(self): self.d_player.quit()
         def get_desktop_entry(self) -> mpris_server.base.Paths: return super().get_desktop_entry() #TODO: me
         def get_current_track(self) -> mpris_server.base.Track:
-            t = mpris_server.base.Track(
-                name = self.d_player.get_current_title(),
-                artists=(mpris_server.base.Artist(name = self.d_player.get_current_artist()),),
+                        meta = self.d_player.get_current_metadata()
+                        t = mpris_server.base.Track(
+                name = meta.title,
+                artists=(mpris_server.base.Artist(name = meta.artist),),
                 album=mpris_server.base.Album(
-                    name = self.d_player.get_current_album(),
+                    name = meta.album,
                     art_url=self.d_player.get_current_art()
                 ),
                 track_id = "/org/mpris/MediaPlayer2/CurrentTrack",
-                uri = self.d_player.get_current_uri(),
+                uri = quote(self.d_player.get_current_uri(), safe="/:"),
                 length = self.d_player.get_current_length() * 1000,
             )
-            return t
+                        return t
         def get_current_position(self) -> int: return int(self.d_player.get_current_position() * 1000)
         def next(self): return self.d_player.next()
         def previous(self): return self.d_player.previous()
@@ -333,8 +347,9 @@ def _except_hook(exc_type, exc_value, exc_traceback):
 
 def exec():
     pathlib.Path("~/.config/dullahan/").expanduser().mkdir(parents=True, exist_ok=True)
-    logging.basicConfig(filename=str(pathlib.Path("~/.config/dullahan/error.log").expanduser()), filemode='a+')
-    logging.getLogger().addHandler(logging.StreamHandler(sys.stderr))
+    #logging.basicConfig(filename=str(pathlib.Path("~/.config/dullahan/error.log").expanduser()), filemode='a+')
+    #logging.getLogger().addHandler(logging.StreamHandler(sys.stderr))
+    
     #sys.excepthook = _except_hook
     #threading.excepthook = _except_hook
     parser = argparse.ArgumentParser("Dullahan")

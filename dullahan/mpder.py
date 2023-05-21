@@ -69,7 +69,6 @@ class ThreadSafeMPD(QtCore.QObject):
             request_id: str = item['id']
             args: list[typing.Any] = item['args']
             kwargs: dict[typing.Any, typing.Any] = item['kwargs']
-
             try:
                 getattr(self.client, 'ping')() #override the dumb type error
             except mpd.ConnectionError:
@@ -133,6 +132,8 @@ class ThreadSafeMPD(QtCore.QObject):
     def listmounts(self) -> list[dict[str, str]]: return self.wrapper('listmounts')
     def idle(self, *subsystems: str) -> list[str]: return self.wrapper('idle', *subsystems)
     def readpicture(self, url: str) -> dict[str, typing.Any]: return self.wrapper('readpicture', url)
+    def prio(self, priority: int, start: int, end: typing.Optional[int] = None) -> None: self.wrapper('prio', priority, start, end)
+    def prioid(self, priority: int, id_: int) -> None: self.wrapper('prioid', priority, id_)
 
 
 class MPDPlayer(basic_player.BasicPlayer):
@@ -151,6 +152,12 @@ class MPDPlayer(basic_player.BasicPlayer):
 
         self.thread_stopped = self.thread_exited = self.running = False
         self.internal_state = 'stop'
+        self.quitafter_enabled = False
+        self.local_status = {
+            'state': self.internal_state,
+            'random': '1' if self.capabilities.shuffle else '0',
+            'xfade': '1' if self.capabilities.crossfade else '0',
+        }
 
     def relative_to_root(self, file: pathlib.Path) -> pathlib.Path | None:
         for root in self.roots:
@@ -194,32 +201,33 @@ class MPDPlayer(basic_player.BasicPlayer):
                 resp = self.event_client.idle()
             except mpd.ConnectionError:
                 continue
-            print(resp)
             for event in resp:
+                self.local_status = self.event_client.status()
                 if event == 'player':
-                    print(self.event_client.currentsong())
-                    if self.current_id != int(self.event_client.currentsong()['id']):
-                        self.current_id = int(self.event_client.currentsong()['id'])
+                    cs = self.event_client.currentsong()
+                    if self.current_id != int(cs['id']):
+                        if self.quitafter_enabled:
+                            self.quit()
+                        self.current_id = int(cs['id'])
                         self.media_finished.emit()
                         self.media_changed.emit()
                         self.media_meta_ready.emit()
-                    state = self.event_client.status()['state']
+                    state = self.local_status['state']
                     if self.current_state != state:
                         self.current_state = state
                         if state == 'play': self.media_played.emit()
                         elif state == 'pause': self.media_paused.emit()
                         elif state == 'stop': self.media_stopped.emit()
                 elif event == 'options':
-                    status = self.event_client.status()
-                    if int(status['repeat']):
+                    if int(self.local_status['repeat']):
                         self.media_looped.emit()
                     else:
                         self.media_unlooped.emit()
-                    if int(status['random']):
+                    if int(self.local_status['random']):
                         self.media_shuffled.emit()
                     else:
                         self.media_unshuffled.emit()
-                    if int(status['xfade']):
+                    if int(self.local_status['xfade']):
                         self.media_crossfade.emit()
                     else:
                         self.media_uncrossfade.emit()
@@ -229,16 +237,18 @@ class MPDPlayer(basic_player.BasicPlayer):
     def get_current_metadata(self) -> MPDMetadata:
         cs = self.client.currentsong()
         return self.get_file_metadata(cs['file'])
-    def get_file_metadata(self, input: str | os.PathLike | dict) -> MPDMetadata:
+    def get_current_metadata_raw(self) -> dict[str, any]:
+        return self.client.currentsong()
+    def get_file_metadata(self, input: str | os.PathLike | dict, noart=False) -> MPDMetadata:
         if isinstance(input, (str, os.PathLike)):
             cs = self.client.find('file', str(input))[0]
         else:
             cs = input
-        pic_data = self.client.readpicture(cs['file'])
-        if pic_data:
-            return MPDMetadata(cs, pic_data['binary'], pic_data['type'].split('/')[-1])
-        else:
-            return MPDMetadata(cs)
+        if not noart:
+            pic_data = self.get_current_art().replace('file://', '', 1)
+            if pic_data:
+                return MPDMetadata(cs, open(pic_data, 'rb').read(), pic_data.split('.')[-1])
+        return MPDMetadata(cs, None, None)
     def get_queue(self) -> typing.Generator[pathlib.Path, None, None]:
         for f in self.get_all_metadata():
             try:
@@ -249,33 +259,64 @@ class MPDPlayer(basic_player.BasicPlayer):
         for i, f in enumerate(self.client.playlistinfo()):
             yield MPDMetadata(f, None, None)
     @QtCore.Slot(None, result=bool)
-    def get_shuffle(self) -> bool: return self.client.status()['random'] == '1'
+    def get_shuffle(self) -> bool: return self.local_status['random'] == '1'
     @QtCore.Slot(None, result=float)
     def get_current_length(self) -> float:
-        return float(self.client.status()['duration'])*1000
+        return float(self.local_status.get('duration', 0))*1000
+    @QtCore.Slot(None, result=int)
+    def get_playlist_size(self) -> int:
+        return self.local_status.get('playlistlength', 0)
     @QtCore.Slot(None, result=float)
     def get_current_position(self) -> float:
         return float(self.client.status()['elapsed'])*1000
     @QtCore.Slot(None, result=str)
-    def get_current_uri(self) -> str:
-        return "file://"+str(pathlib.Path(self.roots[0], self.client.currentsong()['file']))
+    def get_current_uri(self, filename: typing.Optional[str] = None) -> str:
+        return "file://"+str(pathlib.Path(self.roots[0], filename if filename else self.client.currentsong()['file']))
     @QtCore.Slot(None, result=str)
     def get_current_art(self) -> str:
-        find_f = list(pathlib.Path(f"/tmp/dullahan/").glob(f"{self.client.currentsong()['id']}.*"))
+        cs = self.client.currentsong()
+        find_f = list(pathlib.Path(f"/tmp/dullahan/").glob(f"{cs['id']}.*"))
         if len(find_f) > 0 and find_f[0].exists():
             return str(find_f[0])
         else:
-            meta = self.get_file_metadata(self.client.currentsong()['file'])
-            f = pathlib.Path(f"/tmp/dullahan/{self.client.currentsong()['id']}.{meta.art_filetype}")
-            f.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                from mutagen._file import File
+                from mutagen.mp4 import MP4
+                from mutagen.mp3 import MP3
+                from mutagen.flac import FLAC
+                
+                dat = File(str(pathlib.Path(self.roots[0], cs['file'])))
+                if not dat:
+                    raise NotImplementedError
+                if isinstance(dat, MP4):
+                    pic_bin = bytes(dat.tags['covr'][0])
+                    pic_tp = {13: 'jpg', 14: 'png'}[dat.tags['covr'][0].imageformat]
+                elif isinstance(dat, MP3):
+                    pic_bin = dat.tags['APIC:'].data
+                    pic_tp = dat.tags['APIC:'].mime.split('/')[-1]
+                elif isinstance(dat, FLAC):
+                    pic_bin = dat.pictures[0].data
+                    pic_tp = dat.pictures[0].mime.split('/')[-1]
+                else:
+                    raise NotImplementedError
+            except (ImportError, NotImplementedError):
+                pic = self.client.readpicture(cs['file'])
+                pic_bin = pic['binary']
+                pic_tp = pic['type']
+            meta = MPDMetadata(cs, pic_bin, pic_tp.split('/')[-1])
+            #f = pathlib.Path("/tmp/dullahan-tmp-art")
+            f = pathlib.Path(f"/tmp/dullahan/{cs['id']}.{meta.art_filetype}")
+            f.parent.mkdir(parents=True, exist_ok=True, mode=0o755)
             f.write_bytes(meta.raw_art)
-            for nf in pathlib.Path('/tmp/dullahan').iterdir():
-                if nf != f:
-                    nf.unlink(True)
+            f.chmod(0o600)
+            # for nf in pathlib.Path('/tmp/dullahan').iterdir():
+            #     if nf != f:
+            #         print("UNLINK", nf)
+            #         nf.unlink(True)
             return str(f)
     @QtCore.Slot(None, result=str)
     def get_current_state(self) -> str:
-        s = self.client.status()['state']
+        s = self.local_status['state']
         if s == 'play': return 'playing'
         if s == 'pause': return 'paused'
         if s == 'stop': return 'stopped'
@@ -291,7 +332,7 @@ class MPDPlayer(basic_player.BasicPlayer):
         return self.client.currentsong()['album']
     @QtCore.Slot(None, result=bool)
     def get_paused(self) -> bool:
-        return self.client.status()['state'] == 'pause'
+        return self.local_status['state'] == 'pause'
     # set/control
     @QtCore.Slot(int)
     def set_current_by_index(self, index: int) -> None: self.client.play(index)
@@ -302,6 +343,16 @@ class MPDPlayer(basic_player.BasicPlayer):
             relfile = relfile.relative_to(self.roots[0])
         song_id = self.client.playlistfind('file', str(relfile))[0]['pos']
         self.client.play(song_id)
+    @QtCore.Slot(int)
+    def queue_by_index(self, index: int) -> None:
+        self.client.prio(1, index)
+    @QtCore.Slot(str)
+    def queue_by_file(self, file: str) -> None:
+        relfile = pathlib.Path(file)
+        if relfile.is_absolute():
+            relfile = relfile.relative_to(self.roots[0])
+        song_id = self.client.playlistfind('file', str(relfile))[0]['id']
+        self.client.prioid(1, song_id)
     @QtCore.Slot()
     def next(self) -> None: self.client.next()
     @QtCore.Slot()
@@ -319,13 +370,13 @@ class MPDPlayer(basic_player.BasicPlayer):
     @QtCore.Slot()
     def set_playing(self, state: typing.Optional[bool] = None) -> None:
         if state is None:
-            self.client.pause(self.client.status()['state']!='pause')
+            self.client.pause(self.local_status['state']!='pause')
         else:
             self.client.pause(not state)
     @QtCore.Slot(bool)
     @QtCore.Slot()
     def set_stopped(self, state: typing.Optional[bool] = None) -> None:
-        state = state if state is not None else self.client.status()['state']!='stop'
+        state = state if state is not None else self.local_status['state']!='stop'
         if state:
             self.client.stop()
         else:
@@ -341,3 +392,7 @@ class MPDPlayer(basic_player.BasicPlayer):
         while not self.thread_exited:
             pass
         self.finished.emit()
+    @QtCore.Slot()
+    def quit_after_current(self) -> None:
+        self.quitafter_enabled = True
+        self.media_quitafter_enabled.emit()

@@ -1,4 +1,5 @@
 import pathlib
+import sys
 import mutagen
 import mutagen.mp4
 import mutagen._file
@@ -21,7 +22,6 @@ class MetaParser(QtCore.QObject):
     
     def __init__(self, player: basic_player.BasicPlayer) -> None:
         self.player = player
-        self.file_list = []
         self.meta_list: list[dict] = []
         self.dead = False
         self.placeholder_art = QtGui.QImage(50, 50, QtGui.QImage.Format_Indexed8)
@@ -35,31 +35,26 @@ class MetaParser(QtCore.QObject):
         return QtGui.QImage.fromData(QtCore.QByteArray.fromRawData(data))
     
     def run(self):
-        self.meta_list = [vars(m) for m in self.player.get_all_metadata()]
-        # for index, media in enumerate():
-        #     if self.dead:
-        #         break
-        #     self.progress.emit(index+1)
-        #     metadata = self.player.get_file_metadata(media)
-        #     self.meta_list.append(vars(metadata))
+        for index, meta in enumerate(self.player.get_all_metadata()):
+            if self.dead:
+                break
+            self.progress.emit(index+1)
+            self.meta_list.append(vars(meta))
         if not self.dead:
             self.finished.emit()
-    
-    def set_file_list(self, file_list):
-        self.file_list = file_list
 
 class SongSelect(QtCore.QObject):
     song_selected = QtCore.Signal(str)
+    song_queued = QtCore.Signal(str)
     meta_loaded = QtCore.Signal()
     
-    def __init__(self, file_list: list[pathlib.Path], player: basic_player.BasicPlayer) -> None:
-        self.file_list = file_list
+    def __init__(self, player: basic_player.BasicPlayer) -> None:
+        self.playlist_length = player.get_playlist_size()
         self.meta_list: list[dict] = []
         self.icns = []
         
         self.loader_thread = QtCore.QThread()
         self.loader = MetaParser(player)
-        self.loader.set_file_list(file_list)
         self.loader.moveToThread(self.loader_thread)
         self.loader.finished.connect(lambda: self.when_loaded())
         self.loader.progress.connect(lambda v: self.on_meta_progress(v))
@@ -86,6 +81,8 @@ class SongSelect(QtCore.QObject):
         self.songtable.verticalHeader().hide()
         self.songtable.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
         self.songtable.setSelectionBehavior(QtWidgets.QTableView.SelectRows)
+        self.songtable.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
+        self.songtable.customContextMenuRequested.connect(self.right_click)
         self.songtable.doubleClicked.connect(self.on_selected)
         self.tablemodel = QtGui.QStandardItemModel(0, 3)
         self.tablemodel.setHorizontalHeaderLabels(["Title", "Artist", "Album"])
@@ -103,10 +100,37 @@ class SongSelect(QtCore.QObject):
         self.loading = QtWidgets.QLabel(self.main)
         self.lmain.addWidget(self.loading, 2, 0)
     
+    def right_click(self, pos):
+        index = self.songtable.indexAt(pos)
+        rightmenu = QtWidgets.QMenu()
+        rightplay = QtWidgets.QAction("Play Song")
+        queueplay = QtWidgets.QAction("Queue Song")
+        rightmenu.addAction(rightplay)
+        rightmenu.addAction(queueplay)
+        rightplay.triggered.connect(lambda: self.on_selected(index))
+        queueplay.triggered.connect(lambda: self.on_selected_queue(index))
+        #TODO: This
+        # if sys.platform == "linux":
+        #     import subprocess
+        #         if subprocess.run(["sh", "command", "-v", "xdg-open"]).returncode != 1:
+        #         openfolder = QtWidgets.QAction("Open Containing Folder")
+        #         rightmenu.addAction(openfolder)
+        #         openfolder.triggered.connect(lambda: subprocess.Popen("xdg-open", ))
+        rightmenu.exec_(self.songtable.viewport().mapToGlobal(pos))
+    
     #def filter_list(self, rowId, row):
     #    e = self.meta_list[row.row()]
     #    return self.searchbox.text().lower() in (e['title']+str(e['file'])+e['artist']+e['album']).lower()
     
+    def on_selected_queue(self, index: QtCore.QModelIndex):
+        index = self.filter.mapToSource(index)
+        title = self.tablemodel.item(index.row(), 0).text()
+        artist = self.tablemodel.item(index.row(), 1).text()
+        album = self.tablemodel.item(index.row(), 2).text()
+        source = next(filter(lambda e: e['title'] == title and e['artist'] == artist and e['album'] == album, self.meta_list))
+        self.song_queued.emit(str(source['file']))
+        #self.main.hide() #TODO: Make this a config option
+        
     def on_selected(self, index: QtCore.QModelIndex):
         index = self.filter.mapToSource(index)
         title = self.tablemodel.item(index.row(), 0).text()
@@ -122,7 +146,7 @@ class SongSelect(QtCore.QObject):
         
     def on_meta_progress(self, v):
         if self.main.isVisible:
-            self.loading.setText(f"Loading... {v}/{len(self.file_list)}")
+            self.loading.setText(f"Loading... {v}/{self.playlist_length}")
     
     def when_loaded(self):
         self.meta_list = self.loader.meta_list
@@ -133,21 +157,18 @@ class SongSelect(QtCore.QObject):
         self.icns = []
         for mindex, meta in enumerate(self.meta_list):
             #self.songtable.setRowHeight(mindex, 32)
-            #i = QtGui.QPixmap(meta['art'])
-            #self.icns.append(i)
-            #self.songtable.setCellWidget(mindex, 0, l)
-            #self.tablemodel.setItem(mindex, 0, QtGui.QStandardItem(i, meta['title']))
-            self.tablemodel.setItem(mindex, 0, QtGui.QStandardItem(meta['title']))
+            if 'art' in meta:
+                i = QtGui.QPixmap(meta['art'])
+                self.icns.append(i)
+                # self.songtable.setCellWidget(mindex, 0, l)
+                self.tablemodel.setItem(mindex, 0, QtGui.QStandardItem(i, meta['title']))
+            else:
+                self.tablemodel.setItem(mindex, 0, QtGui.QStandardItem(meta['title']))
             self.tablemodel.setItem(mindex, 1, QtGui.QStandardItem(meta['artist']))
             self.tablemodel.setItem(mindex, 2, QtGui.QStandardItem(meta['album']))
-        
-    def set_file_list(self, file_list):
-        self.file_list = file_list
-        self.loader.set_file_list(file_list)
-        self.loading.setText(f"Loading... 0/{len(list(file_list))}")
-        self.update_metadata()
     
     def update_metadata(self):
+        self.loading.setText(f"Loading... 0/{self.playlist_length}")
         self.loader_thread.start()
         self.songtable.setVisible(False)
         self.loading.setVisible(True)

@@ -83,6 +83,9 @@ class BasicPlayer(QtCore.QObject):
     media_finished = QtCore.Signal()
     queue_loaded = QtCore.Signal()
     
+    media_quitafter_enabled = QtCore.Signal()
+    media_quitafter_disabled = QtCore.Signal()
+    
     finished = QtCore.Signal()
     progress = QtCore.Signal(float)
     
@@ -111,6 +114,9 @@ class BasicPlayer(QtCore.QObject):
     @abstractmethod
     @QtCore.Slot(None, result=int)
     def get_current_length(self) -> int: pass
+    @abstractmethod
+    @QtCore.Slot(None, result=int)
+    def get_playlist_size(self) -> int: pass
     @abstractmethod
     @QtCore.Slot(None, result=int)
     def get_current_position(self) -> int: pass
@@ -144,6 +150,12 @@ class BasicPlayer(QtCore.QObject):
     @QtCore.Slot(str)
     def set_current_by_file(self, file: str) -> None: pass
     @abstractmethod
+    @QtCore.Slot(str)
+    def queue_by_file(self, file: str) -> None: pass
+    @abstractmethod
+    @QtCore.Slot(int)
+    def queue_by_index(self, index: int) -> None: pass
+    @abstractmethod
     @QtCore.Slot()
     def next(self) -> None: pass
     @abstractmethod
@@ -172,5 +184,7 @@ class BasicPlayer(QtCore.QObject):
     @abstractmethod
     @QtCore.Slot()
     def quit(self) -> None: pass
+    @QtCore.Slot()
+    def quit_after_current(self) -> None: pass
     
         
