@@ -159,6 +159,8 @@ class MPDPlayer(basic_player.BasicPlayer):
             'xfade': '1' if self.capabilities.crossfade else '0',
         }
 
+        self.request_quit.connect(self.quit)
+
     def relative_to_root(self, file: pathlib.Path) -> pathlib.Path | None:
         for root in self.roots:
             try:
@@ -207,7 +209,9 @@ class MPDPlayer(basic_player.BasicPlayer):
                     cs = self.event_client.currentsong()
                     if self.current_id != int(cs['id']):
                         if self.quitafter_enabled:
-                            self.quit()
+                            self.request_quit.emit()
+                            self.thread_stopped = True
+                            break
                         self.current_id = int(cs['id'])
                         self.media_finished.emit()
                         self.media_changed.emit()

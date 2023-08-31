@@ -1,0 +1,4 @@
+mpris_server
+PySide2
+mutagen
+mpd2

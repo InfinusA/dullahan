@@ -160,6 +160,7 @@ class Tray(QtCore.QObject):
         self.player.media_stopped.connect(lambda: self.tray.setToolTip(f"Dullahan"))
         self.player.media_played.connect(lambda: self.on_pauseplay(False))
         self.player.media_meta_ready.connect(lambda: self.tray.setToolTip(f"{self.player.get_current_title()} \nby {self.player.get_current_artist()} (Dullahan)"))
+        self.player.request_quit.connect(self.popup.quit)
         
         #menu
         self.menu = QtWidgets.QMenu()
@@ -183,8 +184,8 @@ class Tray(QtCore.QObject):
         act_search.triggered.connect(self.popup.show)
         act_exit = QtWidgets.QAction(self._get_icon("application-exit"), "Quit", self.menu)
         act_exit.triggered.connect(lambda: self.quit_button())
-        #act_exitafter = QtWidgets.QAction("Quit after current", self.menu)
-        #act_exitafter.triggered.connect(lambda: self.quitafter_button())
+        act_exitafter = QtWidgets.QAction("Quit after current", self.menu)
+        act_exitafter.triggered.connect(lambda: self.quitafter_button())
     
         
         self.menu.addAction(self.act_toggle)
@@ -197,7 +198,7 @@ class Tray(QtCore.QObject):
         self.menu.addAction(act_search)
         self.menu.addSeparator()
         self.menu.addAction(act_exit)
-        #self.menu.addAction(act_exitafter)
+        self.menu.addAction(act_exitafter)
         
         self.tray.setContextMenu(self.menu)
         self.tray.show()
@@ -223,7 +224,8 @@ class Tray(QtCore.QObject):
         else:
             icon = QtGui.QIcon.fromTheme(name)
         if not icon:
-            raise RuntimeError("icon not found")
+            icon = QtGui.QIcon(QtGui.QPixmap(0,0))
+            #raise RuntimeError("icon not found")
         return icon
         
     def handle_clicks(self, button_pressed):
@@ -363,7 +365,9 @@ def exec():
     conf = parser.parse_args()
     
     app = QtWidgets.QApplication(sys.argv)
-    
+    app.setQuitOnLastWindowClosed(False)
+    app.setApplicationName("dullahan")
+
     #setup threads
     player_thread = QtCore.QThread()
     #mpris_thread = QtCore.QThread()
@@ -391,6 +395,7 @@ def exec():
         app.quit()
     
     player.finished.connect(exit_)
+    #app.aboutToQuit.connect(exit_)
     #start app
     app.exec_()
 

@@ -87,6 +87,7 @@ class BasicPlayer(QtCore.QObject):
     media_quitafter_disabled = QtCore.Signal()
     
     finished = QtCore.Signal()
+    request_quit = QtCore.Signal()
     progress = QtCore.Signal(float)
     
     def __init__(self, config: argparse.Namespace) -> None:

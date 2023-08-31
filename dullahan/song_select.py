@@ -9,7 +9,6 @@ from PySide2 import QtCore, QtWidgets, QtGui
 #def select_song(file_list: list[pathlib.Path]) -> pathlib.Path:
 #    ss = SongSelect(file_list)
 #    return ss.get_song()
-
 class ETableView(QtWidgets.QTableView):
     def keyPressEvent(self, event):
         if event.type() == QtCore.QEvent.KeyPress and (event.key() == QtCore.Qt.Key_Return or event.key() == QtCore.Qt.Key_Enter):
